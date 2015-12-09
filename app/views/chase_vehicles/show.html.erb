@@ -1,0 +1,29 @@
+<p id="notice"><%= notice %></p>
+
+<p>
+  <strong>Description:</strong>
+  <%= @chase_vehicle.description %>
+</p>
+
+<p>
+  <strong>Identifier:</strong>
+  <%= @chase_vehicle.ident %>
+</p>
+
+<p>
+  <strong>Chase Server:</strong>
+  <%= @chase_vehicle.chase_server_id %>
+</p>
+
+<p>
+  <strong>Mission:</strong>
+  <%= @chase_vehicle.mission %>
+</p>
+
+<p>
+  <strong>Ground track:</strong>
+  <%= @chase_vehicle.ground_track %>
+</p>
+
+<%= link_to 'Edit', edit_chase_vehicle_path(@chase_vehicle) %> |
+<%= link_to 'Back', chase_vehicles_path %>

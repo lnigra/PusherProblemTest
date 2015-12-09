@@ -1,0 +1,49 @@
+<p id="notice"><%= notice %></p>
+
+<p>
+  <strong>Description:</strong>
+  <%= @mission.description %>
+</p>
+
+<p>
+  <strong>Identifier:</strong>
+  <%= @mission.ident %>
+</p>
+
+<p>
+  <strong>Start:</strong>
+  <%= @mission.start %>
+</p>
+
+<p>
+  <strong>Target launch:</strong>
+  <%= @mission.target_launch %>
+</p>
+
+<p>
+  <strong>Actual launch:</strong>
+  <%= @mission.actual_launch %>
+</p>
+
+<p>
+  <strong>Target end:</strong>
+  <%= @mission.target_end %>
+</p>
+
+<p>
+  <strong>Actual end:</strong>
+  <%= @mission.actual_end %>
+</p>
+
+<p>
+  <strong>Chase vehicles:</strong>
+  <%= @mission.chase_vehicles %>
+</p>
+
+<p>
+  <strong>Platforms:</strong>
+  <%= @mission.platforms %>
+</p>
+
+<%= link_to 'Edit', edit_mission_path(@mission) %> |
+<%= link_to 'Back', missions_path %>

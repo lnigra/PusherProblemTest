@@ -1,0 +1,33 @@
+<h2></h2>
+<%= form_for @sub_obj do |f| %>
+  <% assocs = @sub_obj.associations %>
+  <% #puts "branch:sub_obj=#{@sub_obj.to_s} object=#{@object}" %>
+  <% @sub_obj.class.keys.keys.each do | key | %>
+    <% unless ( key == "_id" or key == "updated_at" or key == "created_at" or
+                assocs[key.remove("_id").to_sym].to_s.include?("BelongsTo")) %>
+      <% class_str = @sub_obj[key].class.to_s %>
+      <% if key.include?('_id') %>
+        <% unless key.titleize.split.join == @parent_klass %>
+          <%= f.label key, key.titleize %>
+          <%  if plural?(key) %>
+            <%= f.select key.to_s, eval(key.to_s.singularize.titleize.split.join).all.collect  {|p| [ "#{p.make} #{p.model} #{p.serial_no}", p.id ] }, { :include_blank => true } %>
+          <% else %>
+            <%= f.select key.to_s, eval(key.to_s.singularize.titleize.split.join).all.collect  {|p| [ "#{p.make} #{p.model} #{p.serial_no}", p.id ] }, { :include_blank => true } %>
+          <% end %>
+          <%= class_str %>
+          <br>
+        <% end %>
+      <% else %>
+        <%= f.label key, key.titleize %>:
+        <%= f.text_field key, :size => 25 %>
+        <br> 
+      <% end %>
+    <% end %>
+  <% end  %>
+  <% if !@sub_obj.keys['no_edit'] %>
+    <div class="actions">
+      <%= link_to 'Destroy', @sub_obj, method: :delete, data: { confirm: 'Are you sure?' } %>
+      &nbsp<%= f.submit %>
+    </div> 
+  <% end %>
+<% end  %>

@@ -1,0 +1,3 @@
+#!/bin/bash
+cd ~/
+/home/nigra/.rvm/gems/ruby-2.2.1/bin/slanger  --app_key c33f8eaa482b900bae75 --secret 28fe4639b180d593ca52 &>/dev/null &

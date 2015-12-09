@@ -1,0 +1,19 @@
+<p id="notice"><%= notice %></p>
+
+<p>
+  <strong>Source id:</strong>
+  <%= @ground_track.id_source %>
+</p>
+
+<p>
+  <strong>Chase vehicle:</strong>
+  <%= @ground_track.chase_vehicle %>
+</p>
+
+<p>
+  <strong>Points:</strong>
+  <%= @ground_track.points %>
+</p>
+
+<%= link_to 'Edit', edit_ground_track_path(@ground_track) %> |
+<%= link_to 'Back', ground_tracks_path %>

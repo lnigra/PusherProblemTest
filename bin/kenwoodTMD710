@@ -1,0 +1,226 @@
+#! /usr/bin/env ruby
+
+# Basic serial io using 'serialport'
+# check to see if you have any remnant of ruby-serialport:
+# cd ~/.rvm
+# find . -name ruby-serialport*
+# Delete the directories you find with the find command.
+# Install serialport if it's not already done:
+# gem install serialport (NOT ruby-serialport !!!)
+
+require 'net/http'
+require 'time'
+require 'json'
+require 'serialport'
+
+def log_entry entry
+  log_file = File.new( @log_file_name, 'a' )
+  log_file.puts "#{Time.now.utc} #{entry}"
+  log_file.close
+end
+
+def update( data, uri )
+  begin
+    req = Net::HTTP::Post.new(uri.path, 
+          initheader = {'Content-Type' =>'application/json'} )
+    #req.set_form_data( data )
+    req.body = data
+    res = Net::HTTP.start(uri.hostname, uri.port) do |http|
+      http.request(req)
+    end
+    result = "#{res.code} #{res.message} #{uri.to_s}"
+  rescue Errno::ECONNREFUSED
+    result = "Server not available: #{uri.to_s}"
+  rescue
+    result = "Bad request #{uri.to_s} #{data}"
+  end
+end
+
+def aprs_str_to_json( aprs_str )
+  # "WB9SKY-11>APOT02,KA9SCF-15,WIDE1,K9ESV-10,WIDE2*,qAR,W9TMW:/151435z4058.42N/08754.43WO103/024 12.1V 21CTest/A=023677"
+  # "WB9SKY-11>APBL10,N9IO*,WIDE2-1:!4106.07N/08755.13WO317/025/A=005243Adler High Altitude Balloon"
+  # "KC9LHW-11>APBL10,WIDE1-1,WIDE2-1:!4106.18N/08755.31WO309/022/A=005939Adler Planetarium Balloon"
+  #puts "APRS String:#{aprs_str}"
+  source = aprs_str.split(">")[0]
+  call_sign = source.split("-")[0]
+  #puts "call_sign:#{call_sign}"
+  #puts "@ident_filter:#{@ident_filter} class:#{@ident_filter.class}"
+  log_entry( aprs_str )
+  if @ident_filter.include?( call_sign )
+    #puts "call_sign true:#{call_sign}"
+    temp = aprs_str.split(":")
+    preamble = temp[0]
+    info = temp[1][1..temp[1].length - 1]
+    data_type = temp[1][0]
+    if data_type != "/" && data_type != "!"
+      return nil
+    else
+      time = Time.now.utc # Default if "position without timestamp"    
+      # Remove time string if "position with timestamp" and use only if HMS
+      if data_type == "/"
+        if info[6] == "h" || info[6] == "z"
+          t_str = info[0..6]
+        else
+          t_str = info[0..7]          
+        end
+        info.sub!( t_str, "" )
+        if t_str[6] == "h"
+          # Correct date if necessary when time near midnight
+          hr = t_str[0..1].to_i
+          if hr == 0 && time.hr == 23
+            time += 3600
+          end
+          if hr == 23 && time.hr == 0
+            time -= 3600
+          end        
+          time = Time.utc( time.year, time.month, time.day,
+                           t_str[0..1].to_i, t_str[2..3].to_i, t_str[4..5].to_i )
+        end
+      end
+      
+      lat = ( info[0..1].to_f + info[2..6].to_f / 60.0 ) * ( info[7] == "N" ? 1 : -1 )
+      lon = ( info[9..11].to_f + info[12..16].to_f / 60.0 ) * ( info[17] == "E" ? 1 : -1 )
+      course = info[19..21].to_i
+      speed = info[23..25].to_f * @knots2mps
+      sym_id = info[18]
+      sym_code = info[26]
+      alt = info.split("A=")[1][0..5].to_f * @ft2m
+      { :time => time, :lat => lat, :alt => alt, :lon => lon, 
+        :heading => course, :vg => speed, :id_source => @ident_id_hash[call_sign], 
+        :ident => source }.to_json
+      end
+  else
+    #puts "return nil"
+    return nil
+  end
+end
+
+def char_in( c )
+  result = nil
+  #puts "char:#{c.ord}"
+  if c == "\n" || c == "\r"
+    #puts "1"
+    if !@eol_flag
+      #puts "2"
+      result = @msg
+      @msg = ""
+      @eol_flag = true
+    else
+      #puts "3"
+      @eol_flag = false
+    end
+  else
+    #puts "4"
+    @msg += c
+    @msg = "" if @msg == "cmd:"
+    @eol_flag = false
+  end
+  #puts "5"
+  return result
+end
+#puts "start"
+tty_port = '/dev/ttyUSB0' #for example
+baud_rate = 9600
+data_bits = 8
+stop_bits = 1
+parity = SerialPort::NONE
+#puts "ARGV:#{ARGV.to_s}"
+
+@serv_uri = ARGV[0] # root url, i.e. "http://localhost:3000"
+begin
+  @ident_id_hash = JSON.parse( ARGV[1] ) # Beacon ident to id json hash, i.e.
+                                         #  "{\"WB9SKY\":\"182738da48\",...}"
+  @ident_filter = JSON.parse( ARGV[2] ) # Ident filter json array, i.e. 
+                                  #   "[\"WB9SKY\",\"KC9LIG\"]"
+rescue => ex
+  puts ex.message
+  @ident_filter = nil
+  @ident_id_hash = nil
+end
+
+@uri = URI( "#{@serv_uri}/points" )
+@log_file_name = "log/kenwoodTMD710.log"
+
+@knots2mps = 0.51444444444 # m/s
+@ft2m = 0.3048 # m
+
+@msg_buffer = ""
+@msg = ""
+@eol_flag = false
+@msgRdy = false
+@wait = 1
+
+#puts "init"
+
+unless @serv_uri && @ident_id_hash && @ident_filter
+  log_entry( "ERROR: Missing or malformed arguments.")
+  puts "Three args required:"
+  puts '  root url, i.e. "http://localhost:3000"'
+  puts '  Beacon ident to id json hash, i.e. "{\"WB9SKY\":\"182738da48\",...}"'
+  puts '  Ident filter json array, i.e. "[\"WB9SKY\",\"KC9LIG\"]"'
+  exit
+end
+
+last_log_entry = ""
+log_entry( "---------------")
+log_entry( "---------------")
+log_entry( "Started #{@cmd} to server #{@serv_uri}")
+#puts "log started"
+Signal.trap( "TERM" ) do
+  log_entry( "kenwoodTMD710 terminated by SIGTERM")
+  exit
+end
+#puts "init radio"
+begin
+  sp = SerialPort.new( 
+    tty_port, baud_rate, data_bits, stop_bits, parity)
+  sp.flush_input()
+  init = File.open( "bin/TM-D700.CMD", 'r' )
+  line = ""
+  while !init.eof? && line != "[INIT_COMMANDS]"
+    line = init.readline().chomp()
+    #puts line
+  end
+
+  Thread.new {
+    while true do
+      temp = ( temp = sp.getbyte() ) < 127 ? temp.chr : "0"
+      #temp = "\n" unless temp
+      #puts "char:#{temp}"
+      line_rcvd = char_in( temp )
+      #puts "temp:#{temp.ord} result:#{result}"
+      if line_rcvd
+        #puts "line_rcvd:#{line_rcvd}"
+        form_data = aprs_str_to_json( line_rcvd )
+        result = update( form_data, @uri ) if form_data
+        #puts form_data
+        log_entry( result ) unless result == last_log_entry
+        last_log_entry = result
+      end
+      sleep 0.2
+    end
+  }
+  line = init.readline().chomp()
+  while !init.eof? && !line.start_with?( "[EXIT_COMMANDS]" )
+    if line.length > 0 && !line.start_with?( ';' )
+      cmd = line.split('!')[0]
+      sleep @wait
+      if cmd.start_with?( '^' )
+        sp.write( "\x03\r" ) if cmd[1] == 'C'
+        sleep cmd[2].to_i if cmd[1] == 'W'
+      else
+        sp.write( cmd + "\r" )
+      end
+      #puts "command:#{cmd}"
+      log_entry( cmd )
+    end
+    line = init.readline().chomp()
+  end
+  while true do
+    
+  end
+  init.close()
+  
+rescue => ex
+  puts ex.message
+end

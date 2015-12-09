@@ -1,0 +1,74 @@
+#! /bin/bash
+#
+if [ "$1" == '' ]
+then
+  echo 
+  echo "devstart - Starts services if necessary and then the FarHorizonsApp"
+  echo "application in (default) development mode either as server or console."
+  echo 
+  echo "Run from a terminal with format:"
+  echo
+  echo "./devstart [ console | server [debug] ]"
+  echo
+  echo "Optional 'debug' following 'server' will enter command line debugging" 
+  echo "(ruby 'byebug' debugger) on startup."
+  echo 
+  echo "No arguments produces this handy help output (obviously)"
+  echo
+  exit
+fi
+
+hostname="127.0.0.1"
+
+if [ "$1" == 'server' ]
+then
+  CMD="rails server --binding 127.0.0.1"
+  if [ "$2" == 'debug' ]
+  then
+    export DEBUG=""
+  fi
+fi
+
+if [ "$1" == 'console' ]
+then
+  CMD="rails console"
+fi
+echo "Start mongo with local logging if not already running"
+if [ $(pgrep -f mongod) ]
+then
+  echo "mongod is already running"
+else
+  echo "mongod not running, starting it up"
+  echo "(you will have to enter sudo password)..."
+  #Delete prior mongodb log(s)
+  sudo rm ./log/mongod.log*
+  sudo mongod --fork --dbpath /var/lib/mongodb --logpath ./log/mongod.log
+  echo "waiting 5 seconds for mongod to start..."
+  sleep 5
+fi
+
+echo "(re)start local instance of redis-server if not already running..."
+if [ $(pgrep -f redis-server.*6380) ]
+then
+  echo "stopping redis-server on port 6380..."
+  kill $(pgrep -f redis-server.*6380)
+fi
+sleep 2
+
+echo "Starting new instance of redis-server on port 6380"
+#Delete prior redis console log(s)
+rm ./log/redis-console.log*
+redis-server ./config/redis-fh.conf > ./log/redis-console.log &
+echo "waiting 5 seconds for redis-server to start..."
+sleep 5
+
+echo "(Re-)starting map file server on port 2000"
+pkill -f [m]apserver
+sleep 2
+bin/mapserver $hostname /data/map.tiles &
+
+echo "starting application..."
+$CMD
+
+
+
